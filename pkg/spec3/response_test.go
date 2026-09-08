@@ -21,9 +21,11 @@ import (
 	"reflect"
 	"testing"
 
+	jsonv2 "encoding/json/v2"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
-	jsonv2 "k8s.io/kube-openapi/pkg/internal/third_party/go-json-experiment/json"
+
 	"k8s.io/kube-openapi/pkg/spec3"
 	jsontesting "k8s.io/kube-openapi/pkg/util/jsontesting"
 	"k8s.io/kube-openapi/pkg/validation/spec"

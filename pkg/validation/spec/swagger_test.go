@@ -19,15 +19,14 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"reflect"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/kube-openapi/pkg/internal"
-	jsontesting "k8s.io/kube-openapi/pkg/util/jsontesting"
 	"sigs.k8s.io/randfill"
+
+	jsontesting "k8s.io/kube-openapi/pkg/util/jsontesting"
 )
 
 var spec = Swagger{
@@ -180,18 +179,9 @@ func TestSwaggerSpec_Marshalv2Fuzzed(t *testing.T) {
 			swagger := Swagger{}
 			fuzzer.Fill(&swagger)
 
-			internal.UseOptimizedJSONMarshaling = false
-			want, err := json.Marshal(swagger)
-			if err != nil {
-				t.Errorf("failed to marshal swagger: %v", err)
-			}
-			internal.UseOptimizedJSONMarshaling = true
-			got, err := swagger.MarshalJSON()
+			_, err := swagger.MarshalJSON()
 			if err != nil {
 				t.Errorf("failed to marshal next swagger: %v", err)
-			}
-			if err := jsontesting.JsonCompare(want, got); err != nil {
-				t.Errorf("fuzzed marshal doesn't match: %v", err)
 			}
 		})
 	}
@@ -239,14 +229,8 @@ func TestUnmarshalAdditionalProperties(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc, func(t *testing.T) {
-			var v1, v2 SchemaOrBool
-			internal.UseOptimizedJSONUnmarshaling = true
+			var v2 SchemaOrBool
 			require.NoError(t, json.Unmarshal([]byte(tc), &v2))
-			internal.UseOptimizedJSONUnmarshaling = false
-			require.NoError(t, json.Unmarshal([]byte(tc), &v1))
-			if !cmp.Equal(v1, v2, SwaggerDiffOptions...) {
-				t.Fatal(cmp.Diff(v1, v2, SwaggerDiffOptions...))
-			}
 		})
 	}
 }
@@ -272,22 +256,12 @@ func TestSwaggerSpec_ExperimentalUnmarshal(t *testing.T) {
 	t.Log("Specimen", string(jsonBytes))
 
 	actual := Swagger{}
-	internal.UseOptimizedJSONUnmarshaling = true
 
 	err = json.Unmarshal(jsonBytes, &actual)
 	require.NoError(t, err)
 
 	if !cmp.Equal(expected, actual, SwaggerDiffOptions...) {
 		t.Fatal(cmp.Diff(expected, actual, SwaggerDiffOptions...))
-	}
-
-	control := Swagger{}
-	internal.UseOptimizedJSONUnmarshaling = false
-	err = json.Unmarshal(jsonBytes, &control)
-	require.NoError(t, err)
-
-	if !reflect.DeepEqual(control, actual) {
-		t.Fatal(cmp.Diff(control, actual, SwaggerDiffOptions...))
 	}
 }
 
@@ -306,19 +280,7 @@ func BenchmarkSwaggerSpec_ExperimentalUnmarshal(b *testing.B) {
 
 	b.ResetTimer()
 
-	// Parse into kube-openapi types
-	b.Run("jsonv1", func(b2 *testing.B) {
-		internal.UseOptimizedJSONUnmarshaling = false
-		for i := 0; i < b2.N; i++ {
-			var result *Swagger
-			if err := json.Unmarshal(originalJSON, &result); err != nil {
-				b2.Fatal(err)
-			}
-		}
-	})
-
 	b.Run("jsonv2 via jsonv1", func(b2 *testing.B) {
-		internal.UseOptimizedJSONUnmarshaling = true
 		for i := 0; i < b2.N; i++ {
 			var result *Swagger
 			if err := json.Unmarshal(originalJSON, &result); err != nil {
@@ -330,7 +292,6 @@ func BenchmarkSwaggerSpec_ExperimentalUnmarshal(b *testing.B) {
 	// Our UnmarshalJSON implementation which defers to jsonv2 causes the
 	// text to be parsed/validated twice. This costs a significant amount of time.
 	b.Run("jsonv2", func(b2 *testing.B) {
-		internal.UseOptimizedJSONUnmarshaling = true
 		for i := 0; i < b2.N; i++ {
 			var result Swagger
 			if err := result.UnmarshalJSON(originalJSON); err != nil {
@@ -360,20 +321,8 @@ func BenchmarkSwaggerSpec_ExperimentalMarshal(b *testing.B) {
 
 	b.ResetTimer()
 
-	// Serialize kube-openapi types
-	b.Run("jsonv1", func(b2 *testing.B) {
-		b2.ReportAllocs()
-		internal.UseOptimizedJSONMarshaling = false
-		for i := 0; i < b2.N; i++ {
-			if _, err = json.Marshal(swagger); err != nil {
-				b2.Fatal(err)
-			}
-		}
-	})
-
 	b.Run("jsonv2 via jsonv1", func(b2 *testing.B) {
 		b2.ReportAllocs()
-		internal.UseOptimizedJSONMarshaling = true
 		for i := 0; i < b2.N; i++ {
 			if _, err := json.Marshal(swagger); err != nil {
 				b2.Fatal(err)
@@ -383,7 +332,6 @@ func BenchmarkSwaggerSpec_ExperimentalMarshal(b *testing.B) {
 
 	b.Run("jsonv2", func(b2 *testing.B) {
 		b2.ReportAllocs()
-		internal.UseOptimizedJSONUnmarshaling = true
 		for i := 0; i < b2.N; i++ {
 			if _, err = swagger.MarshalJSON(); err != nil {
 				b2.Fatal(err)
